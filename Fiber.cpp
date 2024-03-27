@@ -1,4 +1,5 @@
 #include "Fiber.h"
+#include "Scheduler.h"
 #include <assert.h>
 #include <atomic>
 #include <iostream>
@@ -29,7 +30,9 @@ public:
  * @attention 无参构造只用于创建线程的主协程，也就是线程主函数对应的那个协程，
  * 这个协程只能由特殊方法调用来创建，不可直接创建，因此定义为私有函数。
 */
-Fiber::Fiber() {
+Fiber::Fiber()
+    : m_id(s_fiber_id++)
+    , m_runInScheduler(false) {
     SetThis(this);
     m_state = RUNNING;
 
@@ -38,20 +41,19 @@ Fiber::Fiber() {
     }
 
     ++s_fiber_count;
-    m_id = s_fiber_id++; // 协程id从0开始，用完+1
-
-    std::cout << "Fiber::Fiber() main id = " << m_id << std::endl;
+    // std::cout << "Fiber::Fiber() main id = " << m_id << std::endl;
 }
 
 /**
  * @brief 构造函数，用于创建用户协程
- * @param{in} cb 协程入口函数
- * @param{in} stacksize 栈大小，默认128k
- * @param{in} run_in_scheduler 本协程是否参与调度器调度默认true
+ * @param[in] cb 协程入口函数
+ * @param[in] stacksize 栈大小，默认128k
+ * @param[in] run_in_scheduler 本协程是否参与调度器调度默认true
 */
 Fiber::Fiber(std::function<void()> cb, size_t stacksize, bool run_in_scheduler)
     : m_id(s_fiber_id++)
-    , m_cb(cb) {
+    , m_cb(cb)
+    , m_runInScheduler(run_in_scheduler) {
     ++s_fiber_count;
     m_stacksize = stacksize ? stacksize : g_fiber_stack_size;
     m_stack = StackAllocator::Alloc(m_stacksize);
@@ -66,7 +68,7 @@ Fiber::Fiber(std::function<void()> cb, size_t stacksize, bool run_in_scheduler)
 
     makecontext(&m_ctx, &Fiber::MainFunc, 0);
 
-    std::cout << "Fiber::Fiber() id = " << m_id << std::endl;;
+    // std::cout << "Fiber::Fiber() id = " << m_id << std::endl;
 }
 
 /**
@@ -103,8 +105,15 @@ void Fiber::resume() {
     SetThis(this);
     m_state = RUNNING;
 
-    if (swapcontext(&(t_thread_fiber->m_ctx), &m_ctx)) {
-        assert(("swapcontext", false));
+    // 如果协程参与调度器调度，那么应该和调度器的主协程进行swap，而不是线程主协程
+    if (m_runInScheduler) {
+        if (swapcontext(&(Scheduler::GetMainFiber()->m_ctx), &m_ctx)) {
+            assert(("swapcontext", false));
+        }
+    } else {
+        if (swapcontext(&(t_thread_fiber->m_ctx), &m_ctx)) {
+            assert(("swapcontext", false));
+        }
     }
 }
 
@@ -120,9 +129,16 @@ void Fiber::yield() {
     if (m_state != TERM) {
         m_state = READY;
     }
-
-    if (swapcontext(&m_ctx, &(t_thread_fiber->m_ctx))) {
-        assert(("swapcontext", false));
+    // 与resume相反，如果该协程参与调度，也就是任务协程，那么其yield的对象应该是调度器主协程，
+    // 也就是调度协程；否则其本身是调度线程，就应该yield到主协程
+    if (m_runInScheduler) {
+        if (swapcontext(&m_ctx, &(Scheduler::GetMainFiber()->m_ctx))) {
+            assert(("swapcontext", false));
+        } 
+    } else {
+        if (swapcontext(&m_ctx, &(t_thread_fiber->m_ctx))) {
+            assert(("swapcontext", false));
+        }
     }
 }
 
@@ -147,7 +163,7 @@ void Fiber::MainFunc() {
 /**
  * @brief 重置协程状态和入口函数，复用栈空间，不重新创建栈
  * @note 为简化状态管理，强制只有TERM状态协程才能重置，但其实刚创建好的协程也能重置
- * @param{in} cb 新的协程函数
+ * @param[in] cb 新的协程函数
 */
 void Fiber::reset(std::function<void()> cb) {
     // 重置的协程必须有栈，否则无法复用
@@ -175,8 +191,15 @@ Fiber::~Fiber() {
         assert(m_state == TERM);
         StackAllocator::Dealloc(m_stack, m_stacksize);
     }
-    std::cout << "Fiber::~Fiber() main id = " << m_id
-              << " total=" << s_fiber_count << std::endl;
+    // std::cout << "Fiber::~Fiber() main id = " << m_id
+    //           << " total=" << s_fiber_count << std::endl;
 }
 
+uint64_t Fiber::TotalFibers() {
+    return s_fiber_count;
+}
+
+uint64_t Fiber::GetFiberId() {
+    return t_fiber->m_id;
+}
 
