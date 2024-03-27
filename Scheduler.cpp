@@ -224,7 +224,10 @@ void Scheduler::idle() {
     // std::cout << "idle" << std::endl;
     while (!stopping()) {
         auto cur = Fiber::GetThis();
-        cur->yield();
+        auto raw_ptr = cur.get();
+        cur.reset();
+        // 主要是避免yield后不回来，因此手动释放这个shared_ptr引用
+        raw_ptr->yield();
     }
 }
 
