@@ -1,15 +1,15 @@
 #include "Scheduler.h"
+#include <unistd.h>
 
 void test_fiber(int i) {
     std::cout << "hello world " << i << std::endl;
 }
 
 int main() {
-    /// 初始化主协程
-    Fiber::GetThis();
     /// 创建调度器
-    Scheduler sc;
-
+    Scheduler sc(3, true);
+    sc.start();
+    sleep(2);
     /// 添加调度任务
     for (auto i = 0; i < 10; ++i) {
         // 如果传入的不是共享指针，那么每次循环完成的话，
@@ -20,6 +20,6 @@ int main() {
         sc.schedule(fiber);
     }
     /// 执行调度任务
-    sc.run();
+    sc.stop();
     return 0;
 }
