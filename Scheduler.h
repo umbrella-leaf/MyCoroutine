@@ -131,20 +131,18 @@ private:
         std::function<void()> cb;
         int thread;
 
-        ScheduleTask(Fiber::ptr f, int thr) {
-            fiber = f;
-            thread = thr;
-        }
+        ScheduleTask(Fiber::ptr f, int thr): fiber(f), thread(thr) {}
 
-        ScheduleTask(Fiber::ptr *f, int thr) {
+        ScheduleTask(Fiber::ptr *f, int thr): thread(thr) {
             fiber.swap(*f);
-            thread = thr;
         }
 
-        ScheduleTask(std::function<void()> f, int thr) {
-            cb = f;
-            thread = thr;
+        ScheduleTask(std::function<void()> f, int thr): cb(f), thread(thr) {}
+        
+        ScheduleTask(std::function<void()> *f, int thr): thread(thr) {
+            cb.swap(*f);
         }
+        
         ScheduleTask() {thread = -1;}
 
         void reset() {
