@@ -2,6 +2,7 @@
 
 #include <semaphore.h>
 #include <stdint.h>
+#include <pthread.h>
 
 /**
  * @brief 信号量
