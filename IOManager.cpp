@@ -107,20 +107,41 @@ void IOManager::idle() {
         delete[] ptr;
     });
     while (true) {
-        if (stopping()) {
+        // 获取下一个定时器超时时间，顺便判断调度器是否停止
+        uint64_t next_timeout = 0;
+        if (stopping(next_timeout)) {
             // std::cout << "name=" << getName() << "idle stopping exit" << std::endl;
             break;
         }
-        // 阻塞在epoll_wait上，等到事件发生
-        static const int MAX_TIMEOUT = 5000;
-        int rt = epoll_wait(m_epfd, events, MAX_EVENTS, MAX_TIMEOUT);
-        if (rt < 0) {
-            if (errno == EINTR) {
-                continue;
+
+        int rt = 0;
+        do {
+            // 阻塞在epoll_wait上，等到事件发生
+            static const int MAX_TIMEOUT = 5000;
+            if (next_timeout != ~0ull) {
+                next_timeout = (int)next_timeout > MAX_TIMEOUT
+                                ? MAX_TIMEOUT : next_timeout;
+            } else {
+                next_timeout = MAX_TIMEOUT;
             }
-            std::cerr << "epoll_wait(" << m_epfd << ") (rt=" << rt << ") (errno=" << errno << ") (errstr:" << strerror(errno) << ")";
-            break;
+            rt = epoll_wait(m_epfd, events, MAX_EVENTS, (int)next_timeout);
+            if (rt < 0 && errno == EINTR) {
+                continue;
+            } else {
+                break;
+            }
+        } while (true);
+
+        // 收集所有的已超时定时器，执行回调函数
+        std::vector<std::function<void()>> cbs;
+        listExpiredCb(cbs);
+        if (!cbs.empty()) {
+            for (const auto& cb: cbs) {
+                schedule(cb);
+            }
+            cbs.clear();
         }
+
         // 遍历发生事件，根据epoll_event.data.ptr找到对应的FdContext，进行事件处理
         for (int i = 0; i < rt; ++i) {
             epoll_event &event = events[i];
@@ -424,8 +445,16 @@ IOManager::~IOManager() {
 }
 
 bool IOManager::stopping() {
+    uint64_t timeout = 0;
+    return stopping(timeout);
+}
+
+bool IOManager::stopping(uint64_t& timeout) {
+    timeout = getNextTimer();
     // 对于IOManager而言，必须等到全部调度的IO事件都执行完才能退出
-    return m_pendingEventCount == 0 && Scheduler::stopping();
+    return timeout == ~0ull 
+        && m_pendingEventCount == 0 
+        && Scheduler::stopping();
 }
 
 

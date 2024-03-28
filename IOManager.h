@@ -1,12 +1,13 @@
 # pragma once
 #include "Scheduler.h"
+#include "Timer.h"
 #include "mutex.h"
 #include <memory>
 #include <functional>
 #include <atomic>
 #include <vector>
 
-class IOManager: public Scheduler {
+class IOManager: public Scheduler, public TimerManager {
 public:
     using ptr = std::shared_ptr<IOManager>;
     // 涉及读写，因此使用读写锁
@@ -134,6 +135,12 @@ private:
      * @param[in] size 容量大小
     */
     void contextResize(size_t size);
+    /**
+     * @brief 判断是否可以停止
+     * @param[out] timeout 最近要出发的定时器事件间隔
+     * @return 返回是否可以停止
+     */
+    bool stopping(uint64_t& timeout);
 private:
     /// epoll文件句柄
     int m_epfd = 0;
