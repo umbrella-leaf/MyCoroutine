@@ -464,5 +464,9 @@ void IOManager::onTimerInsertedAtFront() {
     tickle();
 }
 
+IOManager* IOManager::GetThis() {
+    return dynamic_cast<IOManager*>(Scheduler::GetThis());
+}
+
 
 
