@@ -118,9 +118,11 @@ void IOManager::idle() {
         do {
             // 阻塞在epoll_wait上，等到事件发生
             static const int MAX_TIMEOUT = 5000;
+            // 还有定时器，那么距离下一次超时的时间就是min(最大超时时间，当前时间距离首个定时器的时间间隔)
             if (next_timeout != ~0ull) {
                 next_timeout = (int)next_timeout > MAX_TIMEOUT
                                 ? MAX_TIMEOUT : next_timeout;
+            // 没有定时器，则距离下一次超时的时间就是MAX_TIMEOUT
             } else {
                 next_timeout = MAX_TIMEOUT;
             }
@@ -134,6 +136,7 @@ void IOManager::idle() {
 
         // 收集所有的已超时定时器，执行回调函数
         std::vector<std::function<void()>> cbs;
+        // 这是TimerManager执行并检查超时的唯一机会
         listExpiredCb(cbs);
         if (!cbs.empty()) {
             for (const auto& cb: cbs) {
@@ -451,10 +454,14 @@ bool IOManager::stopping() {
 
 bool IOManager::stopping(uint64_t& timeout) {
     timeout = getNextTimer();
-    // 对于IOManager而言，必须等到全部调度的IO事件都执行完才能退出
+    // 对于IOManager而言，必须等到没有定时器，并且全部调度的IO事件都执行完才能退出
     return timeout == ~0ull 
         && m_pendingEventCount == 0 
         && Scheduler::stopping();
+}
+
+void IOManager::onTimerInsertedAtFront() {
+    tickle();
 }
 
 

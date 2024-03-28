@@ -129,6 +129,7 @@ private:
     void tickle() override;
     bool stopping() override;
     void idle() override;
+    void onTimerInsertedAtFront() override;
 
     /**
      * @brief 重置socket句柄上下文的容器大小

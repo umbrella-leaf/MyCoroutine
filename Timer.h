@@ -158,3 +158,8 @@ private:
     /// 上次执行时间
     uint64_t m_previousTime = 0;
 };
+
+/**
+ * @brief 获取当前时间的毫秒
+*/
+uint64_t GetCurrentMS();
