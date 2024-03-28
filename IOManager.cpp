@@ -397,7 +397,7 @@ bool IOManager::cancelAll(int fd) {
     FdContext *fd_ctx = m_fdContexts[fd];
     lock.unlock();
 
-    FdContext::MutexType::Lock lock(fd_ctx->mutex);
+    FdContext::MutexType::Lock lock2(fd_ctx->mutex);
     // 没有事件则返回false
     if (!fd_ctx->events) {
         return false;
